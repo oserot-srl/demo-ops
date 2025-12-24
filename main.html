@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>StoreOps Mobile</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        :root {
+            --action-height: 60px;
+            --border-radius: 16px;
+        }
+
+        body { 
+            background-color: #f0f2f5; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            padding-bottom: 80px; /* Space for sticky footers */
+        }
+
+        /* --- MOBILE CONTAINER --- */
+        .mobile-container {
+            max-width: 600px;
+            margin: 0 auto;
+            min-height: 100vh;
+            background: white;
+            box-shadow: 0 0 20px rgba(0,0,0,0.05);
+            position: relative;
+        }
+
+        /* --- WEARABLE / SMALL SCREEN OPTIMIZATIONS --- */
+        @media (max-width: 350px) {
+            h1, h2, h3, h4 { font-size: 1.2rem !important; }
+            .btn { font-size: 0.9rem !important; padding: 10px !important; }
+            .kpi-label { display: none; } /* Hide labels on watches, show numbers only */
+            .navbar-brand span { display: none; } /* Icon only header */
+        }
+
+        /* --- UI COMPONENTS --- */
+        .status-header {
+            padding: 20px;
+            text-align: center;
+            color: white;
+            border-bottom-left-radius: 20px;
+            border-bottom-right-radius: 20px;
+            margin-bottom: 20px;
+            transition: background-color 0.3s;
+        }
+        .status-closed { background: #e74c3c; }
+        .status-open { background: #27ae60; }
+        .status-closing { background: #f39c12; }
+
+        .big-btn {
+            height: var(--action-height);
+            border-radius: var(--border-radius);
+            font-weight: 700;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            margin-bottom: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .checklist-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .kpi-row {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+            padding: 0 10px;
+        }
+        .kpi-box {
+            background: #fff;
+            border: 1px solid #eee;
+            border-radius: 12px;
+            padding: 10px;
+            min-width: 80px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .kpi-val { font-size: 1.5rem; font-weight: 800; }
+        .kpi-lbl { font-size: 0.7rem; text-transform: uppercase; color: #888; letter-spacing: 1px; }
+
+        /* --- ANIMATIONS --- */
+        .slide-fade-enter-active { transition: all 0.3s ease-out; }
+        .slide-fade-leave-active { transition: all 0.2s cubic-bezier(1.0, 0.5, 0.8, 1.0); }
+        .slide-fade-enter-from, .slide-fade-leave-to { transform: translateY(20px); opacity: 0; }
+
+        /* --- STICKY LOGOUT/NAV --- */
+        .nav-fab {
+            position: fixed;
+            top: 15px;
+            right: 15px;
+            z-index: 1000;
+            background: rgba(255,255,255,0.9);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    
+    <div v-if="!currentUser" class="d-flex align-items-center justify-content-center min-vh-100 bg-light">
+        <div class="p-4 w-100" style="max-width: 400px;">
+            <div class="text-center mb-5">
+                <i class="fas fa-layer-group fa-4x text-primary mb-3"></i>
+                <h2 class="fw-bold">StoreOps</h2>
+                <p class="text-muted">Mobile & Wearable Edition</p>
+            </div>
+            
+            <div class="card border-0 shadow-sm p-3 mb-3">
+                <label class="small text-muted mb-1">USER</label>
+                <select v-model="loginForm.username" class="form-select form-select-lg mb-3 border-0 bg-light">
+                    <option value="" disabled>Select User...</option>
+                    <option value="alice">Alice (Manager)</option>
+                    <option value="bob">Bob (Worker)</option>
+                </select>
+
+                <label class="small text-muted mb-1">PASS</label>
+                <input type="password" v-model="loginForm.password" class="form-control form-control-lg border-0 bg-light mb-3" placeholder="••••">
+                
+                <button @click="login" class="btn btn-primary big-btn mb-0 text-white">
+                    Unlock App
+                </button>
+            </div>
+            <div v-if="loginForm.error" class="text-danger text-center small">{{ loginForm.error }}</div>
+        </div>
+    </div>
+
+    <div v-else class="mobile-container">
+        
+        <div class="nav-fab" @click="logout">
+            <i class="fas fa-sign-out-alt text-dark"></i>
+        </div>
+        
+        <div class="status-header" :class="statusColorClass">
+            <div class="d-flex justify-content-center align-items-center gap-2">
+                <i :class="statusIconClass" class="fa-2x"></i>
+                <h3 class="m-0 fw-bold">{{ storeStatus }}</h3>
+            </div>
+            <div class="small opacity-75 mt-1">{{ currentUser.name }} ({{ currentUser.role }})</div>
+            
+            <div v-if="currentUser.role === 'manager'" class="mt-3 d-flex justify-content-center">
+                <div class="btn-group bg-white rounded-pill p-1">
+                    <button @click="viewMode = 'SELLING'" :class="['btn btn-sm rounded-pill px-3', viewMode === 'SELLING' ? 'btn-dark' : 'btn-light text-muted']">Sell</button>
+                    <button @click="viewMode = 'MANAGING'" :class="['btn btn-sm rounded-pill px-3', viewMode === 'MANAGING' ? 'btn-dark' : 'btn-light text-muted']">Manage</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-3 pb-5">
+            
+            <transition name="slide-fade" mode="out-in">
+            <div v-if="viewMode === 'MANAGING'" key="manager">
+                
+                <div class="kpi-row">
+                    <div class="kpi-box text-success">
+                        <div class="kpi-val">{{ kpi.verified }}</div>
+                        <div class="kpi-lbl">OK</div>
+                    </div>
+                    <div class="kpi-box text-danger">
+                        <div class="kpi-val">{{ kpi.abandoned }}</div>
+                        <div class="kpi-lbl">DROP</div>
+                    </div>
+                    <div class="kpi-box text-muted">
+                        <div class="kpi-val">{{ kpi.failed }}</div>
+                        <div class="kpi-lbl">FAIL</div>
+                    </div>
+                </div>
+
+                <div v-if="storeStatus === 'CLOSED'">
+                    <h6 class="text-muted fw-bold mb-3 ms-2">OPENING CHECKS</h6>
+                    
+                    <div class="checklist-item" @click="checklist.lights = !checklist.lights">
+                        <span class="fw-bold"><i class="fas fa-lightbulb me-2 text-warning"></i> Lights On</span>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" v-model="checklist.lights">
+                        </div>
+                    </div>
+                    <div class="checklist-item" @click="checklist.system = !checklist.system">
+                        <span class="fw-bold"><i class="fas fa-server me-2 text-info"></i> Systems</span>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" v-model="checklist.system">
+                        </div>
+                    </div>
+                    <div class="checklist-item" @click="checklist.clean = !checklist.clean">
+                        <span class="fw-bold"><i class="fas fa-broom me-2 text-primary"></i> Floor Clean</span>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" v-model="checklist.clean">
+                        </div>
+                    </div>
+
+                    <button @click="performOpeningCheck" class="btn btn-success big-btn mt-3 text-white">
+                        <i class="fas fa-unlock me-2"></i> OPEN STORE
+                    </button>
+                    <div v-if="checkFeedback" class="text-danger text-center fw-bold">{{ checkFeedback }}</div>
+                </div>
+
+                <div v-if="storeStatus === 'OPEN'">
+                    <div class="card border-0 bg-light p-4 text-center mb-3">
+                        <i class="fas fa-store-slash fa-3x text-secondary mb-3"></i>
+                        <h5>Store is Running</h5>
+                        <p class="small text-muted">Go to 'Sell' tab to assist customers.</p>
+                    </div>
+                    <button @click="triggerCloseStore" class="btn btn-warning big-btn text-dark">
+                        <i class="fas fa-clock me-2"></i> START CLOSING
+                    </button>
+                </div>
+
+                <div v-if="storeStatus === 'CLOSING_CHECKS'">
+                    <h6 class="text-muted fw-bold mb-3 ms-2">CLOSING CHECKS</h6>
+                    <div class="checklist-item" @click="checklist.cash = !checklist.cash">
+                        <span class="fw-bold"><i class="fas fa-money-bill-wave me-2 text-success"></i> Cash Count</span>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" v-model="checklist.cash">
+                        </div>
+                    </div>
+                    <div class="checklist-item" @click="checklist.secure = !checklist.secure">
+                        <span class="fw-bold"><i class="fas fa-lock me-2 text-danger"></i> Doors Locked</span>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" v-model="checklist.secure">
+                        </div>
+                    </div>
+
+                    <button @click="performClosureCheck" class="btn btn-danger big-btn mt-3 text-white">
+                        <i class="fas fa-check-double me-2"></i> CONFIRM CLOSE
+                    </button>
+                    <div v-if="checkFeedback" class="text-danger text-center fw-bold">{{ checkFeedback }}</div>
+                </div>
+
+            </div>
+
+            <div v-else key="selling">
+                
+                <div v-if="storeStatus !== 'OPEN'" class="text-center py-5 opacity-50">
+                    <i class="fas fa-lock fa-3x mb-3"></i>
+                    <h4>Closed</h4>
+                </div>
+
+                <div v-else>
+                    <div v-if="!activeCustomer">
+                        <button @click="greetCustomer" class="btn btn-primary big-btn py-5" style="height: auto; min-height: 200px; border-radius: 20px;">
+                            <div class="d-flex flex-column align-items-center">
+                                <i class="fas fa-user-plus fa-3x mb-3"></i>
+                                <span>NEW CUSTOMER</span>
+                            </div>
+                        </button>
+                        
+                        <div class="mt-4">
+                            <h6 class="text-muted small ms-2 uppercase">Recent Activity</h6>
+                            <div v-for="log in logs.slice(0,3)" :key="log.id" class="small text-muted border-bottom py-2 ms-2">
+                                {{ log.time }} - {{ log.event }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-else>
+                        <div class="d-flex justify-content-between align-items-center mb-4 px-2">
+                            <span class="h5 m-0 fw-bold text-primary"># Customer</span>
+                            <span class="badge bg-dark rounded-pill">{{ activeCustomer.state }}</span>
+                        </div>
+
+                        <div v-if="activeCustomer.state === 'GREETED'">
+                            <button @click="runCommand('EXPLANATION')" class="btn btn-outline-primary big-btn">
+                                <i class="fas fa-comment me-2"></i> EXPLAIN
+                            </button>
+                            <button @click="runCommand('ABANDON_PRE_EXPL')" class="btn btn-light text-muted big-btn border">
+                                <i class="fas fa-times me-2"></i> Abandon
+                            </button>
+                        </div>
+
+                        <div v-if="activeCustomer.state === 'EXPLANATION_DONE'">
+                            <button @click="runCommand('ASSIST_REGISTRATION')" class="btn btn-success big-btn text-white">
+                                <i class="fas fa-file-signature me-2"></i> REGISTER
+                            </button>
+                            <button @click="runCommand('ABANDON_POST_EXPL')" class="btn btn-light text-muted big-btn border">
+                                <i class="fas fa-walking me-2"></i> Left
+                            </button>
+                        </div>
+
+                        <div v-if="activeCustomer.state === 'REGISTERED'">
+                            <button @click="runCommand('ASSIST_VERIFICATION')" class="btn btn-warning big-btn text-dark">
+                                <i class="fas fa-eye me-2"></i> VERIFY (ORB)
+                            </button>
+                            <button @click="runCommand('ABANDON_AT_VERIF')" class="btn btn-light text-muted big-btn border">
+                                <i class="fas fa-walking me-2"></i> Left
+                            </button>
+                        </div>
+
+                        <div v-if="activeCustomer.state === 'VERIFYING'" class="text-center">
+                            <div class="spinner-border text-warning mb-3" role="status"></div>
+                            <p class="mb-4">Scanning...</p>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <button @click="orbPolicyResult('SUCCESS')" class="btn btn-success big-btn text-white h-100">
+                                        <i class="fas fa-check fa-2x"></i><br>OK
+                                    </button>
+                                </div>
+                                <div class="col-6">
+                                    <button @click="orbPolicyResult('ISSUES')" class="btn btn-danger big-btn text-white h-100">
+                                        <i class="fas fa-exclamation fa-2x"></i><br>ISSUE
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="activeCustomer.state === 'CHECK_ORB'">
+                            <div class="alert alert-danger mb-3">Diagnose Issue</div>
+                            <button @click="orbDiagnose('WORKING')" class="btn btn-dark big-btn">
+                                <i class="fas fa-user-times me-2"></i> User Error
+                            </button>
+                            <button @click="orbDiagnose('BROKEN')" class="btn btn-outline-danger big-btn">
+                                <i class="fas fa-bug me-2"></i> Hardware Broken
+                            </button>
+                        </div>
+
+                        <div v-if="['VERIFIED', 'ABANDONED', 'FAILED', 'KO'].includes(activeCustomer.state)">
+                            <div class="text-center py-4">
+                                <i v-if="activeCustomer.state === 'VERIFIED'" class="fas fa-check-circle fa-5x text-success mb-3"></i>
+                                <i v-if="activeCustomer.state === 'ABANDONED'" class="fas fa-user-slash fa-5x text-secondary mb-3"></i>
+                                <i v-if="activeCustomer.state === 'FAILED' || activeCustomer.state === 'KO'" class="fas fa-times-circle fa-5x text-danger mb-3"></i>
+                                
+                                <h3>{{ activeCustomer.state }}</h3>
+                                <button @click="resetCustomer" class="btn btn-primary big-btn mt-4 text-white">
+                                    Next Customer
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+            </transition>
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+<script>
+    const { createApp } = Vue;
+
+    // --- MOCK REPO ---
+    const MOCK_USERS = [
+        { id: 1, username: 'alice', name: 'Alice', role: 'manager' },
+        { id: 2, username: 'bob', name: 'Bob', role: 'worker' }
+    ];
+
+    createApp({
+        data() {
+            return {
+                currentUser: null,
+                loginForm: { username: '', password: '', error: '' },
+                viewMode: 'SELLING',
+                storeStatus: 'CLOSED',
+                checklist: { lights: false, system: false, clean: false, cash: false, secure: false },
+                checkFeedback: '',
+                activeCustomer: null,
+                logs: [],
+                kpi: { verified: 0, abandoned: 0, failed: 0 }
+            }
+        },
+        computed: {
+            statusColorClass() {
+                if(this.storeStatus === 'OPEN') return 'status-open';
+                if(this.storeStatus === 'CLOSED') return 'status-closed';
+                return 'status-closing';
+            },
+            statusIconClass() {
+                if(this.storeStatus === 'OPEN') return 'fas fa-door-open';
+                if(this.storeStatus === 'CLOSED') return 'fas fa-door-closed';
+                return 'fas fa-clipboard-check';
+            }
+        },
+        methods: {
+            login() {
+                const user = MOCK_USERS.find(u => u.username === this.loginForm.username);
+                if (user && this.loginForm.password) {
+                    this.currentUser = user;
+                    this.viewMode = user.role === 'manager' ? 'MANAGING' : 'SELLING';
+                } else {
+                    this.loginForm.error = 'Select a user and enter any password';
+                }
+            },
+            logout() {
+                this.currentUser = null;
+                this.loginForm = { username: '', password: '', error: '' };
+            },
+            logEvent(name) {
+                const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                this.logs.unshift({ id: Date.now(), time, event: name });
+            },
+            
+            // --- LOGIC SAME AS PREVIOUS, JUST CONNECTED TO NEW UI ---
+            performOpeningCheck() {
+                if (this.checklist.lights && this.checklist.system && this.checklist.clean) {
+                    this.storeStatus = 'OPEN';
+                    this.checkFeedback = '';
+                    this.checklist = { lights: false, system: false, clean: false, cash: false, secure: false };
+                } else {
+                    this.checkFeedback = 'Complete all items!';
+                }
+            },
+            triggerCloseStore() { this.storeStatus = 'CLOSING_CHECKS'; },
+            performClosureCheck() {
+                if (this.checklist.cash && this.checklist.secure) {
+                    this.storeStatus = 'CLOSED';
+                    this.checkFeedback = '';
+                    this.checklist = { lights: false, system: false, clean: false, cash: false, secure: false };
+                } else {
+                    this.checkFeedback = 'Complete all items!';
+                }
+            },
+            greetCustomer() { this.activeCustomer = { state: 'GREETED' }; this.logEvent('Greeted'); },
+            runCommand(cmd) {
+                if(!this.activeCustomer) return;
+                const map = {
+                    'EXPLANATION': { s: 'EXPLANATION_DONE', l: 'Explained' },
+                    'ASSIST_REGISTRATION': { s: 'REGISTERED', l: 'Registered' },
+                    'ASSIST_VERIFICATION': { s: 'VERIFYING', l: 'Verifying' },
+                    'ABANDON_PRE_EXPL': { s: 'ABANDONED', l: 'Drop (Pre)', kpi: 'abandoned' },
+                    'ABANDON_POST_EXPL': { s: 'ABANDONED', l: 'Drop (Post)', kpi: 'abandoned' },
+                    'ABANDON_AT_VERIF': { s: 'ABANDONED', l: 'Drop (Verif)', kpi: 'abandoned' }
+                };
+                
+                const action = map[cmd];
+                if(action.kpi) this.kpi[action.kpi]++;
+                this.logEvent(action.l);
+                
+                if(cmd === 'EXPLANATION') setTimeout(() => this.activeCustomer.state = action.s, 500);
+                else this.activeCustomer.state = action.s;
+            },
+            orbPolicyResult(res) {
+                if (res === 'SUCCESS') {
+                    this.activeCustomer.state = 'VERIFIED';
+                    this.kpi.verified++;
+                } else {
+                    this.activeCustomer.state = 'CHECK_ORB';
+                }
+            },
+            orbDiagnose(type) {
+                this.activeCustomer.state = type === 'WORKING' ? 'FAILED' : 'KO';
+                this.kpi.failed++;
+            },
+            resetCustomer() { this.activeCustomer = null; }
+        }
+    }).mount('#app');
+</script>
+</body>
+</html>
